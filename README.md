@@ -1,7 +1,6 @@
 # microservice_rollout_monitoring
 Leverage CI/CD to monitor releases in a GitHub environment and ensure releases are meeting SLO expectations
 
-
 # Canary Deployment & Observability Lab
 
 ## Objective
@@ -17,7 +16,7 @@ graph TD
     A[Developer Push to GitHub] --> B[GitHub Actions CI/CD]
     B --> C[Docker Build + Push to Registry]
     C --> D[Helm/Manifest Deploy to Kubernetes]
-    D --> E[Canary Deployment (10% traffic)]
+    D --> E[Canary Deployment]
     E --> F{SLOs Met?}
     F -->|Yes| G[Promote to 100%]
     F -->|No| H[Rollback to Previous Stable]
