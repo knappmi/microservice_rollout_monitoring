@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: microservice-canary
+  namespace: microservice-canary
+  labels:
+    app: microservice
+    version: canary
+    deployment-type: canary
+spec:
+  replicas: 1  # Start with 1 replica for canary
+  selector:
+    matchLabels:
+      app: microservice
+      version: canary
+  template:
+    metadata:
+      labels:
+        app: microservice
+        version: canary
+        deployment-type: canary
+    spec:
+      imagePullSecrets:
+      - name: ghcr-secret
+      containers:
+      - name: microservice
+        image: ghcr.io/knappmi/observability-demo-app:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+        env:
+        # Service-specific configuration (canary overrides)
+        - name: VERSION_LABEL
+          value: "v1.1.0-canary"
+        - name: SIM_BAD
+          value: "true"
+        - name: ERROR_RATE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: ERROR_RATE_DEFAULT
+        - name: LATENCY_SIMULATION
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: LATENCY_SIMULATION_DEFAULT
+        - name: MAX_LATENCY
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: MAX_LATENCY_DEFAULT
+        - name: OUTAGE_SIMULATION
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OUTAGE_SIMULATION_DEFAULT
+        
+        # OpenTelemetry Configuration from ConfigMap
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_EXPORTER_OTLP_ENDPOINT
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_EXPORTER_OTLP_INSECURE
+        - name: OTEL_SERVICE_NAME
+          value: "microservice"
+        - name: OTEL_SERVICE_VERSION
+          value: "v1.1.0"
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "service.name=microservice,service.version=v1.1.0,deployment.type=canary,$(OTEL_RESOURCE_ATTRIBUTES_BASE)"
+        - name: OTEL_RESOURCE_ATTRIBUTES_BASE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_RESOURCE_ATTRIBUTES_BASE
+        - name: OTEL_PYTHON_LOG_CORRELATION
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_PYTHON_LOG_CORRELATION
+        - name: OTEL_PYTHON_LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_PYTHON_LOG_LEVEL
+        
+        # Environment Configuration
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: ENVIRONMENT
+        - name: CLUSTER_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: CLUSTER_TYPE
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: LOG_LEVEL
+        
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 5  # More lenient for canary
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 3

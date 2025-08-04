@@ -1,0 +1,95 @@
+# Multi-stage build for production-ready image
+FROM python:3.10-slim as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set the working directory
+WORKDIR /app
+
+# Copy requirements first for better layer caching
+COPY requirements.txt .
+
+# Install dependencies
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Production stage
+FROM python:3.10-slim
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy Python packages from builder stage  
+COPY --from=builder /root/.local /home/appuser/.local
+
+# Create a non-root user for security
+RUN adduser --disabled-password --gecos '' --uid 1000 appuser
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the web application code
+COPY web-app/ .
+
+# Change ownership to appuser and fix permissions
+RUN chown -R appuser:appuser /app /home/appuser/.local
+
+# Switch to non-root user
+USER appuser
+
+# Make sure Python packages are in PATH for appuser
+ENV PATH=/home/appuser/.local/bin:$PATH
+
+# Expose the port the app runs on
+EXPOSE 5000
+
+# Set production-ready OpenTelemetry environment variables
+ENV OTEL_SERVICE_NAME=observability-demo-app
+ENV OTEL_SERVICE_VERSION=1.0.0
+ENV OTEL_RESOURCE_ATTRIBUTES=service.name=observability-demo-app,service.version=1.0.0
+ENV OTEL_PYTHON_LOG_CORRELATION=true
+ENV OTEL_PYTHON_LOG_LEVEL=info
+ENV PYTHONPATH=/app
+
+# Default configuration for production readiness
+ENV SIM_BAD=false
+ENV ERROR_RATE=0.05
+ENV LATENCY_SIMULATION=false
+ENV MAX_LATENCY=1.0
+ENV OUTAGE_SIMULATION=false
+ENV VERSION_LABEL=v1.0.0-stable
+
+# Command to run the application with OpenTelemetry auto-instrumentation
+CMD ["opentelemetry-instrument", "python", "main.py"]
+
+# Health check command with better configuration
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:5000/health || exit 1
+
+# Enhanced labels for Docker Hub
+LABEL org.opencontainers.image.title="Observability Demo Microservice"
+LABEL org.opencontainers.image.description="Production-ready Python microservice with OpenTelemetry, Prometheus metrics, and configurable failure simulation for observability testing"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.authors="Your Name <your.email@example.com>"
+LABEL org.opencontainers.image.url="https://hub.docker.com/r/yourusername/observability-demo-app"
+LABEL org.opencontainers.image.source="https://github.com/yourusername/microservice_rollout_monitoring"
+LABEL org.opencontainers.image.vendor="Your Organization"
+LABEL org.opencontainers.image.licenses="MIT"
+
+# Usage documentation in labels
+LABEL usage.basic="docker run -p 5000:5000 yourusername/observability-demo-app"
+LABEL usage.with_jaeger="docker run -p 5000:5000 -e OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317 yourusername/observability-demo-app"
+LABEL usage.bad_simulation="docker run -p 5000:5000 -e SIM_BAD=true -e ERROR_RATE=0.3 yourusername/observability-demo-app"
+
+# Configuration documentation
+LABEL config.sim_bad="Enable failure simulation (true/false)"
+LABEL config.error_rate="Error rate for simulation (0.0-1.0)"
+LABEL config.latency_simulation="Enable latency simulation (true/false)"
+LABEL config.max_latency="Maximum latency in seconds"
+LABEL config.version_label="Custom version label for identification"

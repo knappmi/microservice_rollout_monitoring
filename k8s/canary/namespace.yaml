@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: microservice-canary
+  labels:
+    name: microservice-canary
+    purpose: canary-rollout-testing

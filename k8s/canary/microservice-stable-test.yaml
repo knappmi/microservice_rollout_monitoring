@@ -1,0 +1,152 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: microservice-stable
+  namespace: microservice-canary
+  labels:
+    app: microservice
+    version: stable
+    deployment-type: stable
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: microservice
+      version: stable
+  template:
+    metadata:
+      labels:
+        app: microservice
+        version: stable
+        deployment-type: stable
+    spec:
+      containers:
+      - name: microservice
+        image: python:3.9-slim
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5000
+        command: ["python", "-c"]
+        args: 
+        - |
+          import http.server
+          import socketserver
+          import json
+          import os
+          from datetime import datetime
+          
+          class HealthHandler(http.server.BaseHTTPRequestHandler):
+              def do_GET(self):
+                  if self.path == '/health':
+                      self.send_response(200)
+                      self.send_header('Content-type', 'application/json')
+                      self.end_headers()
+                      response = {
+                          'status': 'healthy',
+                          'version': os.getenv('VERSION_LABEL', 'v1.0.0-stable'),
+                          'timestamp': datetime.now().isoformat(),
+                          'environment': os.getenv('ENVIRONMENT', 'local')
+                      }
+                      self.wfile.write(json.dumps(response).encode())
+                  elif self.path == '/':
+                      self.send_response(200)
+                      self.send_header('Content-type', 'text/html')
+                      self.end_headers()
+                      html = f"""
+                      <html><body>
+                      <h1>Microservice Test - {os.getenv('VERSION_LABEL', 'stable')}</h1>
+                      <p>Status: Running</p>
+                      <p>Environment: {os.getenv('ENVIRONMENT', 'local')}</p>
+                      <p>Time: {datetime.now().isoformat()}</p>
+                      <a href="/health">Health Check</a>
+                      </body></html>
+                      """
+                      self.wfile.write(html.encode())
+                  else:
+                      self.send_response(404)
+                      self.end_headers()
+          
+          with socketserver.TCPServer(("", 5000), HealthHandler) as httpd:
+              print("Test server running on port 5000")
+              httpd.serve_forever()
+        env:
+        # Service-specific configuration
+        - name: VERSION_LABEL
+          value: "v1.0.0-stable"
+        - name: SIM_BAD
+          value: "false"
+        
+        # OpenTelemetry Configuration from ConfigMap
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_EXPORTER_OTLP_ENDPOINT
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_EXPORTER_OTLP_INSECURE
+        - name: OTEL_SERVICE_NAME
+          value: "microservice"
+        - name: OTEL_SERVICE_VERSION
+          value: "v1.0.0"
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "service.name=microservice,service.version=v1.0.0,deployment.type=stable,$(OTEL_RESOURCE_ATTRIBUTES_BASE)"
+        - name: OTEL_RESOURCE_ATTRIBUTES_BASE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_RESOURCE_ATTRIBUTES_BASE
+        - name: OTEL_PYTHON_LOG_CORRELATION
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_PYTHON_LOG_CORRELATION
+        - name: OTEL_PYTHON_LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_PYTHON_LOG_LEVEL
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: ENVIRONMENT
+        - name: CLUSTER_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: CLUSTER_TYPE
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: LOG_LEVEL
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 3
+        
+        # Resource constraints
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"

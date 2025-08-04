@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traffic-generator
+  namespace: microservice-canary
+  labels:
+    app: traffic-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traffic-generator
+  template:
+    metadata:
+      labels:
+        app: traffic-generator
+    spec:
+      containers:
+      - name: traffic-generator
+        image: curlimages/curl:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Starting traffic generation for canary testing..."
+          echo "Waiting for services to be ready..."
+          sleep 30
+          
+          # Counter for requests
+          REQUEST_COUNT=0
+          
+          while true; do
+            REQUEST_COUNT=$((REQUEST_COUNT + 1))
+            echo "=== Request #$REQUEST_COUNT at $(date) ==="
+            
+            # Make requests to the main service (will hit both stable and canary)
+            echo "Testing main service (load balanced):"
+            RESPONSE=$(curl -s -w "Status: %{http_code}, Time: %{time_total}s" \
+              http://microservice/health 2>/dev/null || echo "Request failed")
+            echo "Health: $RESPONSE"
+            
+            RESPONSE=$(curl -s -w "Status: %{http_code}, Time: %{time_total}s" \
+              http://microservice/ 2>/dev/null || echo "Request failed")
+            echo "Root: $RESPONSE"
+            
+            RESPONSE=$(curl -s -w "Status: %{http_code}, Time: %{time_total}s" \
+              http://microservice/users 2>/dev/null || echo "Request failed")
+            echo "Users: $RESPONSE"
+            
+            # Every 10th request, test individual services
+            if [ $((REQUEST_COUNT % 10)) -eq 0 ]; then
+              echo "--- Direct service testing ---"
+              echo "Stable only:"
+              curl -s -w "Status: %{http_code}, Time: %{time_total}s\n" \
+                http://microservice-stable/ || echo "Stable failed"
+              
+              echo "Canary only:"
+              curl -s -w "Status: %{http_code}, Time: %{time_total}s\n" \
+                http://microservice-canary/ || echo "Canary failed"
+            fi
+            
+            echo "Sleeping 5 seconds..."
+            sleep 5
+          done
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"

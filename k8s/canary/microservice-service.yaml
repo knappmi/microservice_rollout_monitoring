@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: microservice
+  namespace: microservice-canary
+  labels:
+    app: microservice
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 5000
+    name: http
+  selector:
+    app: microservice  # This will load balance across ALL versions
+
+---
+# Stable-only service for direct access
+apiVersion: v1
+kind: Service
+metadata:
+  name: microservice-stable
+  namespace: microservice-canary
+  labels:
+    app: microservice
+    version: stable
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 5000
+    name: http
+  selector:
+    app: microservice
+    version: stable
+
+---
+# Canary-only service for direct access
+apiVersion: v1
+kind: Service
+metadata:
+  name: microservice-canary
+  namespace: microservice-canary
+  labels:
+    app: microservice
+    version: canary
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 5000
+    name: http
+  selector:
+    app: microservice
+    version: canary
+
+---
+# External load balancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: microservice-lb
+  namespace: microservice-canary
+  labels:
+    app: microservice
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: microservice

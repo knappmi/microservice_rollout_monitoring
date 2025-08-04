@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: microservice-config-bad
+  namespace: microservice-canary
+  labels:
+    app: microservice
+    component: configuration
+    environment: local
+    type: bad-rollout-test
+data:
+  # Environment type
+  ENVIRONMENT: "local"
+  CLUSTER_TYPE: "minikube"
+  
+  # OpenTelemetry Configuration
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+  OTEL_EXPORTER_OTLP_INSECURE: "true"
+  OTEL_PYTHON_LOG_CORRELATION: "true"
+  OTEL_PYTHON_LOG_LEVEL: "info"
+  OTEL_RESOURCE_ATTRIBUTES_BASE: "environment=local,cluster=minikube"
+  
+  # Service Configuration
+  SERVICE_PORT: "5000"
+  LOG_LEVEL: "info"
+  
+  # BAD ROLLOUT SIMULATION - Enable failures for canary testing
+  SIM_BAD_DEFAULT: "true"
+  ERROR_RATE_DEFAULT: "0.5"           # 50% error rate
+  LATENCY_SIMULATION_DEFAULT: "true"
+  MAX_LATENCY_DEFAULT: "8.0"          # 8 second delays
+  OUTAGE_SIMULATION_DEFAULT: "false"  # Don't enable complete outage by default
+  
+  # Version labeling for bad rollout
+  VERSION_LABEL_DEFAULT: "v2.0.0-bad"

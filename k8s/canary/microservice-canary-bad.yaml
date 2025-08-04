@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: microservice-canary-bad
+  namespace: microservice-canary
+  labels:
+    app: microservice
+    version: canary-bad
+    deployment-type: canary
+    test-type: bad-rollout
+spec:
+  replicas: 1  # Start with 1 replica for canary
+  selector:
+    matchLabels:
+      app: microservice
+      version: canary-bad
+  template:
+    metadata:
+      labels:
+        app: microservice
+        version: canary-bad
+        deployment-type: canary
+        test-type: bad-rollout
+    spec:
+      imagePullSecrets:
+      - name: ghcr-secret
+      containers:
+      - name: microservice
+        image: ghcr.io/knappmi/observability-demo-app:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+        env:
+        # BAD ROLLOUT SIMULATION - Enable all failure modes
+        - name: VERSION_LABEL
+          value: "v2.0.0-bad-rollout"
+        - name: SIM_BAD
+          value: "true"
+        - name: ERROR_RATE
+          value: "0.7"              # 70% error rate - very bad!
+        - name: LATENCY_SIMULATION
+          value: "true"
+        - name: MAX_LATENCY
+          value: "10.0"             # 10 second delays
+        - name: OUTAGE_SIMULATION
+          value: "false"            # Don't kill the service completely
+        
+        # Standard configuration from ConfigMap
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: ENVIRONMENT
+        - name: CLUSTER_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: CLUSTER_TYPE
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_EXPORTER_OTLP_ENDPOINT
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_EXPORTER_OTLP_INSECURE
+        - name: OTEL_PYTHON_LOG_CORRELATION
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_PYTHON_LOG_CORRELATION
+        - name: OTEL_PYTHON_LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_PYTHON_LOG_LEVEL
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "$(OTEL_RESOURCE_ATTRIBUTES_BASE),service.version=$(VERSION_LABEL),deployment.type=canary-bad"
+        - name: OTEL_RESOURCE_ATTRIBUTES_BASE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_RESOURCE_ATTRIBUTES_BASE
+        - name: OTEL_SERVICE_VERSION
+          value: "2.0.0-bad"
+        - name: SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: SERVICE_PORT
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: LOG_LEVEL
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 10
+          failureThreshold: 5    # More lenient for bad rollout
+        readinessProbe:
+          httpGet:
+            path: /health        # Use same endpoint as liveness
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          timeoutSeconds: 8
+          failureThreshold: 5    # More lenient for bad rollout
+        
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      
+      restartPolicy: Always

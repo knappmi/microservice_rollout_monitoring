@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: microservice-stable
+  namespace: microservice-canary
+  labels:
+    app: microservice
+    version: stable
+    deployment-type: stable
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: microservice
+      version: stable
+  template:
+    metadata:
+      labels:
+        app: microservice
+        version: stable
+        deployment-type: stable
+    spec:
+      imagePullSecrets:
+      - name: ghcr-secret
+      containers:
+      - name: microservice
+        image: ghcr.io/knappmi/observability-demo-app:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+        env:
+        # Service-specific configuration
+        - name: VERSION_LABEL
+          value: "v1.0.0-stable"
+        - name: SIM_BAD
+          value: "false"
+        
+        # OpenTelemetry Configuration from ConfigMap
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_EXPORTER_OTLP_ENDPOINT
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_EXPORTER_OTLP_INSECURE
+        - name: OTEL_SERVICE_NAME
+          value: "microservice"
+        - name: OTEL_SERVICE_VERSION
+          value: "v1.0.0"
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "service.name=microservice,service.version=v1.0.0,deployment.type=stable,$(OTEL_RESOURCE_ATTRIBUTES_BASE)"
+        - name: OTEL_RESOURCE_ATTRIBUTES_BASE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_RESOURCE_ATTRIBUTES_BASE
+        - name: OTEL_PYTHON_LOG_CORRELATION
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_PYTHON_LOG_CORRELATION
+        - name: OTEL_PYTHON_LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: OTEL_PYTHON_LOG_LEVEL
+        
+        # Environment Configuration
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: ENVIRONMENT
+        - name: CLUSTER_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: CLUSTER_TYPE
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: microservice-config
+              key: LOG_LEVEL
+        
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5

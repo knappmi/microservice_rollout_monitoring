@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chatbot-training-config
+  namespace: microservice-canary
+  labels:
+    app: microservice
+    component: chatbot-training
+    environment: local
+data:
+  # Chatbot Training Scenarios
+  TRAINING_MODE: "true"
+  SCENARIO_ROTATION_INTERVAL: "300"  # 5 minutes per scenario
+  
+  # Enhanced Logging for Chatbot
+  CHATBOT_LOG_LEVEL: "debug"
+  INCLUDE_BUSINESS_CONTEXT: "true"
+  LOG_USER_ACTIONS: "true"
+  LOG_PERFORMANCE_METRICS: "true"
+  
+  # Scenario Definitions
+  SCENARIOS: |
+    {
+      "healthy": {
+        "description": "Normal operation",
+        "error_rate": 0.01,
+        "latency_max": 0.5,
+        "outage_chance": 0,
+        "duration_minutes": 5
+      },
+      "degraded_performance": {
+        "description": "High latency but functional",
+        "error_rate": 0.05,
+        "latency_max": 3.0,
+        "outage_chance": 0.01,
+        "duration_minutes": 10
+      },
+      "high_error_rate": {
+        "description": "Service returning many errors",
+        "error_rate": 0.25,
+        "latency_max": 1.0,
+        "outage_chance": 0.02,
+        "duration_minutes": 8
+      },
+      "cascading_failure": {
+        "description": "Intermittent outages with recovery",
+        "error_rate": 0.40,
+        "latency_max": 5.0,
+        "outage_chance": 0.15,
+        "duration_minutes": 15
+      },
+      "database_issues": {
+        "description": "Simulated database connectivity problems",
+        "error_rate": 0.30,
+        "latency_max": 8.0,
+        "outage_chance": 0.08,
+        "duration_minutes": 12
+      },
+      "memory_pressure": {
+        "description": "High memory usage causing issues",
+        "error_rate": 0.15,
+        "latency_max": 4.0,
+        "outage_chance": 0.05,
+        "duration_minutes": 20
+      }
+    }
+  
+  # Business Context for Chatbot
+  BUSINESS_SCENARIOS: |
+    {
+      "user_registration_spike": "Simulating high user registration load",
+      "payment_processing": "Simulating payment gateway integration issues",
+      "data_migration": "Simulating database migration impact",
+      "external_api_failure": "Simulating third-party service outage",
+      "deployment_issues": "Simulating canary deployment problems"
+    }

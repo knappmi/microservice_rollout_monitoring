@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14250:14250"  # gRPC
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  # Your microservice - healthy version
+  microservice-healthy:
+    build: .
+    ports:
+      - "5001:5000"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_SERVICE_NAME=microservice-healthy
+      - OTEL_SERVICE_VERSION=1.0.0
+      - SIM_BAD=false
+    depends_on:
+      - jaeger
+
+  # Your microservice - with bad SLOs
+  microservice-chaos:
+    build: .
+    ports:
+      - "5002:5000"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_SERVICE_NAME=microservice-chaos
+      - OTEL_SERVICE_VERSION=1.0.0
+      - SIM_BAD=true
+      - ERROR_RATE=0.3
+      - LATENCY_SIMULATION=true
+      - MAX_LATENCY=2.0
+      - OUTAGE_SIMULATION=true
+    depends_on:
+      - jaeger
+
+  # Load generator for testing
+  load-generator:
+    image: alpine/curl
+    depends_on:
+      - microservice-healthy
+      - microservice-chaos
+    command: >
+      sh -c "
+        echo 'Starting load generation...'
+        while true; do
+          echo 'Testing healthy service...'
+          curl -s http://microservice-healthy:5000/ || echo 'Healthy service failed'
+          curl -s http://microservice-healthy:5000/users || echo 'Healthy users failed'
+          curl -s http://microservice-healthy:5000/health || echo 'Healthy health failed'
+          
+          echo 'Testing chaos service...'
+          curl -s http://microservice-chaos:5000/ || echo 'Chaos service failed'
+          curl -s http://microservice-chaos:5000/users || echo 'Chaos users failed'
+          curl -s http://microservice-chaos:5000/health || echo 'Chaos health failed'
+          
+          sleep 5
+        done
+      "
